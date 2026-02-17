@@ -66,16 +66,26 @@ ce_sample = pd.concat(ce_frames, ignore_index=True) if ce_frames else pd.DataFra
 ce_sample.head()
 
 
-# 3-way join: instance_usage ⟶ instance_events ⟶ collection_events
-# Join 1: usage ↔ instance_events on (collection_id, instance_index)
-merged = usage_sample.merge(ie_sample, on=['collection_id', 'instance_index'], how='inner', suffixes=('', '_ie'))
+# last event per instance (terminal event: FAIL, EVICT, FINISH, KILL)
+instance_events = ie_sample.sort_values('time').drop_duplicates(
+    subset=['collection_id', 'instance_index'], keep='last'
+)[['collection_id', 'instance_index', 'type', 'time']].rename(
+    columns={'type': 'event_type', 'time': 'event_time'}
+)
+
+# one row per collection_id, SUBMIT events only
+collection_metadata = ce_sample[
+    ce_sample['type'] == 0 
+].drop_duplicates(subset='collection_id')[
+    ['collection_id', 'priority', 'collection_logical_name', 'scheduling_class']
+]
+
+merged = usage_sample.merge(instance_events, on=['collection_id', 'instance_index'], how='left')
 print(f"usage ⨝ instance_events: {merged.shape}")
 
-# Join 2: bring in collection_events on collection_id
-full = merged.merge(ce_sample, on='collection_id', how='inner', suffixes=('', '_ce'))
-## print(f"Full 3-way join: {full.shape}")
+full = merged.merge(collection_metadata, on='collection_id', how='left')
+print(f"Full 3-way join: {full.shape}")
 
-# quick memory check
 mem_mb = full.memory_usage(deep=True).sum() / 1e6
-## print(f"Memory usage: {mem_mb:.1f} MB")
+print(f"Memory usage: {mem_mb:.1f} MB")
 full.head()

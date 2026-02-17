@@ -9,7 +9,6 @@ usage_frames = []
 for batch in usage_file.iter_batches(batch_size=100_000):
     usage_frames.append(batch.to_pandas())
     total = sum(len(f) for f in usage_frames)
-    # Safety cap — adjust as needed
     if total > 500_000:
         print(f"Stopping early with {total} usage rows")
         break
@@ -76,7 +75,7 @@ print(f"usage ⨝ instance_events: {merged.shape}")
 full = merged.merge(ce_sample, on='collection_id', how='inner', suffixes=('', '_ce'))
 ## print(f"Full 3-way join: {full.shape}")
 
-# Quick memory check
+# quick memory check
 mem_mb = full.memory_usage(deep=True).sum() / 1e6
 ## print(f"Memory usage: {mem_mb:.1f} MB")
 full.head()

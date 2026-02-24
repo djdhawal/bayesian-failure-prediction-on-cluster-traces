@@ -3,17 +3,27 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import duckdb
-
+import os
 
 class data_loader():
 
-    def __init__(self, base_url='gs://clusterdata_2019_a', threads=32, max_workers=16):
+    def __init__(self, base_url='gs://clusterdata_2019_a', threads=None, max_workers=None):
         self.base_url = base_url
-        self.threads = threads
-        self.max_workers = max_workers
+        # max_workers × threads ≈ 2x number of CPU cores; assuming 10 cores
+        num_cpus = os.cpu_count()  # logical cores
+        self.threads = threads or max(1, num_cpus // 4)
+        self.max_workers = max_workers or max(1, num_cpus // self.threads)
 
 
     def parallel_load_test(self, fn, shards=0, max_workers=16, batch_size=10, **kwargs) -> pd.DataFrame:
+        '''
+        function to run another function that returns a dataframe across concurrent futures.
+            args : 
+                fn : function which will be executed by concurrent futures
+                shards : number of shards we want to read from the gcs bucket
+                max-workers : number of parallel workers
+                batch_size : read shards in batches of batch_size\
+        '''
         batches = list(range(0, shards, batch_size))  # [0, 10, 20, ...]
         results = [None] * len(batches)
         with ThreadPoolExecutor(max_workers=max_workers) as ex:

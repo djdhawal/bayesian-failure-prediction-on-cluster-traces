@@ -1,91 +1,58 @@
-
-import pyarrow.parquet as pq
 import pandas as pd
-
-# sweep instance_usage in batches, collect all rows
-usage_file = pq.ParquetFile("instance_usage-000000000000.parquet.gz")
-
-usage_frames = []
-for batch in usage_file.iter_batches(batch_size=100_000):
-    usage_frames.append(batch.to_pandas())
-    total = sum(len(f) for f in usage_frames)
-    if total > 500_000:
-        print(f"Stopping early with {total} usage rows")
-        break
-
-usage_sample = pd.concat(usage_frames, ignore_index=True)
-## print(f"usage_sample: {usage_sample.shape}")
-## print(f"Memory: {usage_sample.memory_usage(deep=True).sum() / 1e6:.1f} MB")
-usage_sample.head()
+import pyarrow as pa
+import pyarrow.parquet as pq
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import duckdb
 
 
-# Step 2: Extract unique (collection_id, instance_index) pairs
-pair_df = usage_sample[['collection_id', 'instance_index']].drop_duplicates()
-sampled_ids = set(pair_df['collection_id'].unique())
-## print(f"Unique (collection_id, instance_index) pairs: {len(pair_df)}")
-## print(f"Unique collection_ids: {len(sampled_ids)}")
+class data_loader():
 
-# Step 3: Filter instance_events by matching (collection_id, instance_index) pairs
-ie_file = pq.ParquetFile("instance_events-000000000000.parquet.gz")
-
-ie_frames = []
-for batch in ie_file.iter_batches(batch_size=100_000):
-    chunk = batch.to_pandas()
-    filtered = chunk.merge(pair_df, on=['collection_id', 'instance_index'], how='inner')
-    if len(filtered):
-        ie_frames.append(filtered)
-    # Safety cap
-    total = sum(len(f) for f in ie_frames)
-    if total > 50_000:
-        print(f"Stopping early with {total} instance_event rows")
-        break
-
-ie_sample = pd.concat(ie_frames, ignore_index=True) if ie_frames else pd.DataFrame()
-## print(f"instance_events matched: {ie_sample.shape}")
-ie_sample.head()
+    def __init__(self, base_url='gs://clusterdata_2019_a', threads=32, max_workers=16):
+        self.base_url = base_url
+        self.threads = threads
+        self.max_workers = max_workers
 
 
-
-# Step 4: Filter collection_events by matching collection_ids
-ce_file = pq.ParquetFile("collection_events-000000000000.parquet.gz")
-
-ce_frames = []
-for batch in ce_file.iter_batches(batch_size=100_000):
-    chunk = batch.to_pandas()
-    filtered = chunk[chunk['collection_id'].isin(sampled_ids)]
-    if len(filtered):
-        ce_frames.append(filtered)
-
-    total = sum(len(f) for f in ce_frames)
-    if total > 50_000:
-        print(f"Stopping early with {total} collection_event rows")
-        break
-
-ce_sample = pd.concat(ce_frames, ignore_index=True) if ce_frames else pd.DataFrame()
-## print(f"collection_events matched: {ce_sample.shape}")
-ce_sample.head()
+    def parallel_load_test(self, fn, shards=0, max_workers=16, batch_size=10, **kwargs) -> pd.DataFrame:
+        batches = list(range(0, shards, batch_size))  # [0, 10, 20, ...]
+        results = [None] * len(batches)
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futs = {
+                ex.submit(fn, start, min(start + batch_size - 1, shards - 1), **kwargs): i
+                for i, start in enumerate(batches)
+            }
+            for fut in as_completed(futs):
+                i = futs[fut]
+                results[i] = fut.result()
+                print(f"batch {i+1}/{len(batches)}")
+        return pd.concat(results, ignore_index=True)
 
 
-# last event per instance (terminal event: FAIL, EVICT, FINISH, KILL)
-instance_events = ie_sample.sort_values('time').drop_duplicates(
-    subset=['collection_id', 'instance_index'], keep='last'
-)[['collection_id', 'instance_index', 'type', 'time']].rename(
-    columns={'type': 'event_type', 'time': 'event_time'}
-)
+    def dck_db_load(self, shard_range_start=None, shard_range_end=None, cols=None, collection_ids=None, instance_indexes=None) -> pd.DataFrame:
+        assert shard_range_start is not None, "shard_range_start cannot be None"
+        assert shard_range_end is not None, "shard_range_end cannot be None"
+        assert cols is not None, "cols cannot be None"
+        assert collection_ids is not None, "collection_ids cannot be None"
+        assert instance_indexes is not None, "instance_indexes cannot be None"
 
-# one row per collection_id, SUBMIT events only
-collection_metadata = ce_sample[
-    ce_sample['type'] == 0 
-].drop_duplicates(subset='collection_id')[
-    ['collection_id', 'priority', 'collection_logical_name', 'scheduling_class']
-]
 
-merged = usage_sample.merge(instance_events, on=['collection_id', 'instance_index'], how='left')
-print(f"usage ⨝ instance_events: {merged.shape}")
+        con = duckdb.connect()
+        con.sql("INSTALL httpfs; LOAD httpfs;")
+        con.sql(f"SET threads = {self.threads};")
 
-full = merged.merge(collection_metadata, on='collection_id', how='left')
-print(f"Full 3-way join: {full.shape}")
+        dfs=[]
+        print(f"processing {shard_range_start} to {shard_range_end}...")
+        for char in [str(i).zfill(5) for i in range(shard_range_start,shard_range_end+1)]:
+            print(f"processing {char}...")
+            df = con.sql(f"""
+                SELECT {cols}
 
-mem_mb = full.memory_usage(deep=True).sum() / 1e6
-print(f"Memory usage: {mem_mb:.1f} MB")
-full.head()
+                FROM read_parquet('{self.base_url}/instance_usage-0000000{char}.parquet.gz')
+                WHERE collection_id IN ({collection_ids})
+                AND instance_index IN ({instance_indexes})
+                ORDER BY collection_id, instance_index, start_time
+                --LIMIT 10000
+            """).df()
+            dfs.append(df)
+
+        return pd.concat(dfs, ignore_index=True)

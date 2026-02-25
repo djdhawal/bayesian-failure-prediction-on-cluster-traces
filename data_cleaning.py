@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import regex as re
 
-class cleaning_functions():
+class FeatureTransformer():
     def clean_cpu_usage_distribution(
         self,    
         df: pd.DataFrame,
@@ -51,15 +51,7 @@ class cleaning_functions():
             out["cpu_p10"] = dist_df["cpu_p10"]
             out["cpu_p50"] = dist_df["cpu_p50"]
             out["cpu_p90"] = dist_df["cpu_p90"]
-
-        # sanity check
-        if "cpu_p10" not in out.columns:
-            out["cpu_p10"] = dist_df["cpu_p10"]
-        if "cpu_p50" not in out.columns:
-            out["cpu_p50"] = dist_df["cpu_p50"]
-        if "cpu_p90" not in out.columns:
-            out["cpu_p90"] = dist_df["cpu_p90"]
-
+    
         out["cpu_burstiness"] = out["cpu_p90"] - out["cpu_p10"]
 
         # not dropping the op column for now, we'll manually select features
@@ -69,31 +61,39 @@ class cleaning_functions():
         return out
     
 
-    def clean_start_time_to_datetime(df: pd.DataFrame, col: str = "start_time") -> pd.DataFrame:
+    def clean_start_time_to_datetime(
+            self,
+            df: pd.DataFrame, 
+            cols: list = None) -> pd.DataFrame:
         """
-        Converts Unix timestamp column to pandas datetime.
-        Inserts the new datetime column immediately to the right of the original column.
+        Converts Unix timestamp columns to pandas datetime.
+        Inserts the new datetime columns immediately to the right of the original column.
         """
         out = df.copy()
 
-        if col not in out.columns:
-            return out
-
         unit = 'us'
 
-        new_col_name = col + "_datetime"
-        datetime_values = pd.to_datetime(out[col], unit=unit, errors="coerce")
+        for col in cols:
+            if col not in out.columns:
+                continue
+        
+            new_col_name = col + "_datetime"
+            datetime_values = pd.to_datetime(out[col], unit=unit, errors="coerce")
 
-        # find index of original column
-        col_index = out.columns.get_loc(col)
+            # find index of original column
+            col_index = out.columns.get_loc(col)
 
-        # insert new column immediately after it
-        out.insert(col_index + 1, new_col_name, datetime_values)
+            # insert new column immediately after it
+            out.insert(col_index + 1, new_col_name, datetime_values)
 
         return out
     
 
-    def clean_log_transforms(df: pd.DataFrame, epsilon: float = 1e-7, cols_to_tansform: list = []) -> pd.DataFrame:
+    def clean_log_transforms(
+            self, 
+            df: pd.DataFrame, 
+            epsilon: float = 1e-7, 
+            cols_to_tansform: list = None) -> pd.DataFrame:
         """
         Applies log transform to list of columns passed as cols_to_transform
         Inserts log columns immediately to the right.

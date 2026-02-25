@@ -1,11 +1,9 @@
 import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import duckdb
 import os
 
-class data_loader():
+class DataLoader():
 
     def __init__(self, base_url='gs://clusterdata_2019_a', threads=None, max_workers=None):
         self.base_url = base_url
@@ -15,7 +13,7 @@ class data_loader():
         self.max_workers = max_workers or max(1, num_cpus // self.threads)
 
 
-    def parallel_load_test(self, fn, shards=0, max_workers=16, batch_size=10, **kwargs) -> pd.DataFrame:
+    def parallel_load(self, fn, shards=0, max_workers=None, batch_size=10, **kwargs) -> pd.DataFrame:
         '''
         function to run another function (that returns a dataframe) across concurrent futures.
             args : 
@@ -24,6 +22,7 @@ class data_loader():
                 max-workers : number of parallel workers
                 batch_size : read shards in batches of batch_size\
         '''
+        max_workers = max_workers or self.max_workers
         batches = list(range(0, shards, batch_size))  # [0, 10, 20, ...]
         results = [None] * len(batches)
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
@@ -59,19 +58,22 @@ class data_loader():
         con.sql("INSTALL httpfs; LOAD httpfs;")
         con.sql(f"SET threads = {self.threads};")
 
-        dfs=[]
-        print(f"processing {shard_range_start} to {shard_range_end}...")
-        for char in [str(i).zfill(5) for i in range(shard_range_start,shard_range_end+1)]:
-            print(f"processing {char}...")
-            df = con.sql(f"""
-                SELECT {cols}
+        try:
+            dfs=[]
+            print(f"processing {shard_range_start} to {shard_range_end}...")
+            for char in [str(i).zfill(5) for i in range(shard_range_start,shard_range_end+1)]:
+                print(f"processing {char}...")
+                df = con.sql(f"""
+                    SELECT {cols}
 
-                FROM read_parquet('{self.base_url}/instance_usage-0000000{char}.parquet.gz')
-                WHERE collection_id IN ({collection_ids})
-                AND instance_index IN ({instance_indexes})
-                ORDER BY collection_id, instance_index, start_time
-                --LIMIT 10000
-            """).df()
-            dfs.append(df)
+                    FROM read_parquet('{self.base_url}/instance_usage-0000000{char}.parquet.gz')
+                    WHERE collection_id IN ({collection_ids})
+                    AND instance_index IN ({instance_indexes})
+                    ORDER BY collection_id, instance_index, start_time
+                    --LIMIT 10000
+                """).df()
+                dfs.append(df)
+        finally:
+            con.close()
 
         return pd.concat(dfs, ignore_index=True)

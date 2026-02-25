@@ -17,7 +17,7 @@ class data_loader():
 
     def parallel_load_test(self, fn, shards=0, max_workers=16, batch_size=10, **kwargs) -> pd.DataFrame:
         '''
-        function to run another function that returns a dataframe across concurrent futures.
+        function to run another function (that returns a dataframe) across concurrent futures.
             args : 
                 fn : function which will be executed by concurrent futures
                 shards : number of shards we want to read from the gcs bucket
@@ -39,12 +39,21 @@ class data_loader():
 
 
     def dck_db_load(self, shard_range_start=None, shard_range_end=None, cols=None, collection_ids=None, instance_indexes=None) -> pd.DataFrame:
+
+        '''
+        function to initialize a duckdb connection and query shards between 'shard_range_start' and 'shard_range_end' from gcs bucket. 
+        args:
+            shard_range_start : start reading shards from here 
+            shard_range_end : stop reading here
+            cols : string containing comma separated cols to pull (goes inside the query)
+            collection_ids : string containing comma separated collection ids to filter on (goes inside the query)
+            instance_indexes : string containing comma separated instance idxs to filter on (goes inside the query) // this might probably be removed
+        '''
         assert shard_range_start is not None, "shard_range_start cannot be None"
         assert shard_range_end is not None, "shard_range_end cannot be None"
         assert cols is not None, "cols cannot be None"
         assert collection_ids is not None, "collection_ids cannot be None"
         assert instance_indexes is not None, "instance_indexes cannot be None"
-
 
         con = duckdb.connect()
         con.sql("INSTALL httpfs; LOAD httpfs;")

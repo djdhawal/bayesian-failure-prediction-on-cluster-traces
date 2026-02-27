@@ -1,8 +1,5 @@
 # Bayesian Job Failure Prediction in Distributed Systems
 
-**Optimus Primes** — Sameeksha Kini · Jenitha Patel · Dhawal Dixit · RJ Xia · Sabayna Ali  
-Bayesian Machine Learning · Spring 2026
-
 ---
 
 ## Overview

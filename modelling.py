@@ -23,6 +23,13 @@ import funsor
 
 class Model():
     def __init__(self):
+        self.sequences = []
+        self.lengths = []
+        self.model = None
+        self.results = None
+        self.rng_key = random.PRNGKey(0)
+        self.steps = 15000
+        self.args = { 'h_dim' : 3 }
         pass
 
     def model_gaussian_hmm(self, sequences, lengths, args, include_prior=True):
@@ -96,9 +103,9 @@ class Model():
                     window_size=100):
   
         assert pairs is not None, "pairs must be provided"
-        sequences = []
-        lengths = []
 
+        sequences =[]
+        lengths =[]
         for target_pair in pairs:
             print(*(target_pair))
             task_data = self.get_task(df, target_pair)  # should return numpy array of shape (T, 4)
@@ -112,10 +119,10 @@ class Model():
                 lengths.append(window_size)
 
         # Convert to JAX arrays
-        sequences = jnp.array(np.stack(sequences))  # (num_total_windows, 100, 4)
-        lengths = jnp.array(lengths)
+        self.sequences = jnp.array(np.stack(sequences))  # (num_total_windows, 100, 4)
+        self.lengths = jnp.array(lengths)
 
-        return sequences, lengths
+        return self.sequences, self.lengths
 
 
     def plot_distributions(self, df, feature_set = None ) -> None:
@@ -145,6 +152,9 @@ class Model():
             self.model_gaussian_hmm(*args, **kwargs)
 
     def initialize_inference(self):
+        '''
+            returns initialized model ready to train.
+        '''
         # autonormal guide foe svi
         guide = AutoNormal(self.model_for_guide)
 
@@ -159,9 +169,27 @@ class Model():
                 ))
             )
         )
-        svi = SVI(self.model_gaussian_hmm, guide, scheduler, TraceEnum_ELBO())
 
+        numpyro.render_model(self.model_gaussian_hmm,
+                  model_args=(self.sequences,self.lengths,self.args),
+                  render_distributions=True)
+        
+        self.model = SVI(self.model_gaussian_hmm, guide, scheduler, TraceEnum_ELBO())
 
+        return self.model
+    
+
+    def run_model_inference(self):
+        
+        self.results = self.model.run(
+            self.rng_key,
+            self.steps,               # num_steps
+            self.sequences,           # positional arg: sequences
+            self.lengths,             # positional arg: lengths
+            self.args,                # positional arg: args
+        )
+
+        return self.results
     
     
 

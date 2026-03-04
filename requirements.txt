@@ -1,0 +1,6 @@
+duckdb==1.4.4
+jax==0.7.2
+numpy==2.4.2
+numpyro==0.20.0
+pandas==3.0.1
+regex==2026.2.19

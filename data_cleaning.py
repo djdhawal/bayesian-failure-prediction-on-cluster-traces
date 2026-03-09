@@ -59,6 +59,22 @@ class FeatureTransformer():
             # out = out.drop(columns=[col])
 
         return out
+
+
+    def clean_tail_cpu_usage_distribution(
+        self,    
+        df: pd.DataFrame,
+        col: str = "cpu_usage_distribution",
+        expected_len: int = 11,
+        keep_all_percentiles: bool = True,
+        drop_original: bool = True ) -> pd.DataFrame:
+        """
+        Parses cpu_usage_distribution which is a list of floats
+        Produces cpu_p0, cpu_p10, ..., cpu_p100
+        and cpu_burstiness = cpu_p90 - cpu_p10
+        """
+
+
     
 
     def clean_start_time_to_datetime(

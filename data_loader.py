@@ -1,3 +1,4 @@
+
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import duckdb
@@ -73,43 +74,44 @@ class DataLoader():
         con = duckdb.connect()
         con.sql("INSTALL httpfs; LOAD httpfs;")
         con.sql(f"SET threads = {self.threads};")
-        char = str(shard_range_start).zfill(5);
-        query_set = {
-            'collection_events' : f"""
-                    SELECT {cols}
-                    FROM read_parquet('{self.base_url}/collection_events-0000000{char}.parquet.gz')
-                    WHERE collection_id IN ({target_collection_ids})
-                    LIMIT 10000
-                """,
-            'instance_events' : f"""
-                    SELECT {cols}
-                    FROM read_parquet('{self.base_url}/instance_events-0000000{char}.parquet.gz')
-                    WHERE collection_id IN ({target_collection_ids})
-                    --LIMIT 10000
-                """,
-            'instance_usage' : f"""
-                    SELECT {cols}
-
-                    FROM read_parquet('{self.base_url}/instance_usage-0000000{char}.parquet.gz')
-                    WHERE collection_id IN ({target_collection_ids})
-                    AND instance_index IN ({target_instance_indexes})
-                    ORDER BY collection_id, instance_index, start_time
-                    --LIMIT 10000
-                """,
-            'instance_usage_1' : f"""
-                    SELECT {cols}
-                    FROM read_parquet('{self.base_url}/instance_usage-0000000{char}.parquet.gz')
-                    WHERE (collection_id, instance_index) IN ({target_pairs})
-                    ORDER BY collection_id, instance_index, start_time
-                    --LIMIT 10000"""
-                }
 
         try:
             dfs=[]
             print(f"processing {shard_range_start} to {shard_range_end}...")
-            for char in [str(i).zfill(5) for i in range(shard_range_start,shard_range_end+1)]:
+            for i in range(shard_range_start,shard_range_end+1):
+                char = str(i).zfill(5)
                 print(f"processing {char}...")
-                #change query here
+
+                query_set = {
+                    'collection_events' : f"""
+                            SELECT {cols}
+                            FROM read_parquet('{self.base_url}/collection_events-0000000{char}.parquet.gz')
+                            WHERE collection_id IN ({target_collection_ids})
+                            LIMIT 10000
+                        """,
+                    'instance_events' : f"""
+                            SELECT {cols}
+                            FROM read_parquet('{self.base_url}/instance_events-0000000{char}.parquet.gz')
+                            WHERE collection_id IN ({target_collection_ids})
+                            --LIMIT 10000
+                        """,
+                    'instance_usage' : f"""
+                            SELECT {cols}
+
+                            FROM read_parquet('{self.base_url}/instance_usage-0000000{char}.parquet.gz')
+                            WHERE collection_id IN ({target_collection_ids})
+                            AND instance_index IN ({target_instance_indexes})
+                            ORDER BY collection_id, instance_index, start_time
+                            --LIMIT 10000
+                        """,
+                    'instance_usage_1' : f"""
+                            SELECT {cols}
+                            FROM read_parquet('{self.base_url}/instance_usage-0000000{char}.parquet.gz')
+                            WHERE (collection_id, instance_index) IN ({target_pairs})
+                            ORDER BY collection_id, instance_index, start_time
+                            --LIMIT 10000"""
+                }
+
                 df = con.sql(query_set[query]).df()
                 dfs.append(df)
         finally:

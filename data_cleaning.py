@@ -2,108 +2,79 @@ import pandas as pd
 import numpy as np
 import regex as re
 
-class FeatureTransformer():
-    def clean_cpu_usage_distribution(
-        self,    
-        df: pd.DataFrame,
-        col: str = "cpu_usage_distribution",
-        expected_len: int = 11,
-        keep_all_percentiles: bool = True,
-        drop_original: bool = True ) -> pd.DataFrame:
-        """
-        Parses cpu_usage_distribution which is a list of floats
-        Produces cpu_p0, cpu_p10, ..., cpu_p100
-        and cpu_burstiness = cpu_p90 - cpu_p10
-        """
+class FeatureEngineer():
+    def __init__(self):
+        self._NUM = r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?"
 
-        out = df.copy()
-        if col not in out.columns:
-            return out
+    def log_norm_columns(self, df, list_of_columns_to_normalize):
+        logged_normed_cols = []
+        for col in list_of_columns_to_normalize:
+            df[col] = df[col].astype(np.float32)
+            col_logged = f"{col}_logged"
+            df[col_logged] = np.log(df[col] + 1e-7)
+            col_logged_normed = f"{col_logged}_normed"
+            df[col_logged_normed] = (df[col_logged] - df[col_logged].mean()) / df[col_logged].std()
+            logged_normed_cols.append(col_logged_normed)
+        return df, logged_normed_cols
 
-        def parse_dist(val, expected_len=expected_len):
-            try:
-                if isinstance(val, (list, np.ndarray, tuple)):
-                    vals = list(val)
-                elif isinstance(val, str):
-                    nums = re.findall(r'[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?', val)
-                    vals = [float(x) for x in nums]
-                else:
-                    return [np.nan] * expected_len
+    import numpy as np, regex as re
 
-                # pad/truncate to expected_len
-                vals = vals[:expected_len] + [np.nan] * max(0, expected_len - len(vals))
-                return vals
-            except Exception:
-                return [np.nan] * expected_len
-
-        dist_parsed = out[col].apply(parse_dist)
-
-        pct_cols = [f"cpu_p{i}" for i in range(0, 101, 10)]  # p0..p100 
-        dist_df = pd.DataFrame(dist_parsed.tolist(), columns=pct_cols, index=out.index)
-
-        if keep_all_percentiles:
-            # insert all percentile columns right after the original col
-            insert_at = out.columns.get_loc(col) + 1
-            for j, c in enumerate(pct_cols):
-                out.insert(insert_at + j, c, dist_df[c])
-        else:
-            # only keep the ones you actually use
-            out["cpu_p10"] = dist_df["cpu_p10"]
-            out["cpu_p50"] = dist_df["cpu_p50"]
-            out["cpu_p90"] = dist_df["cpu_p90"]
-    
-        out["cpu_burstiness"] = out["cpu_p90"] - out["cpu_p10"]
-
-        # not dropping the op column for now, we'll manually select features
-        # if drop_original:
-            # out = out.drop(columns=[col])
-
-        return out
-
-
-    def clean_tail_cpu_usage_distribution(
-        self,    
-        df: pd.DataFrame,
-        col: str = "cpu_usage_distribution",
-        expected_len: int = 11,
-        keep_all_percentiles: bool = True,
-        drop_original: bool = True ) -> pd.DataFrame:
-        """
-        Parses cpu_usage_distribution which is a list of floats
-        Produces cpu_p0, cpu_p10, ..., cpu_p100
-        and cpu_burstiness = cpu_p90 - cpu_p10
-        """
-
-
-    
-
-    def clean_start_time_to_datetime(
-            self,
-            df: pd.DataFrame, 
-            cols: list = None) -> pd.DataFrame:
-        """
-        Converts Unix timestamp columns to pandas datetime.
-        Inserts the new datetime columns immediately to the right of the original column.
-        """
-        out = df.copy()
-
-        unit = 'us'
-
-        for col in cols:
-            if col not in out.columns:
-                continue
+    def _fast_parse_col(self, series, expected_len):
+        """vectorised parse, returns float64 array"""
         
-            new_col_name = col + "_datetime"
-            datetime_values = pd.to_datetime(out[col], unit=unit, errors="coerce")
+        out = np.full((len(series), expected_len), np.nan, dtype=np.float64)
+        vals = series.values
 
-            # find index of original column
-            col_index = out.columns.get_loc(col)
-
-            # insert new column immediately after it
-            out.insert(col_index + 1, new_col_name, datetime_values)
-
+        for i in range(len(vals)):
+            v = vals[i]
+            try:
+                if isinstance(v, str):
+                    nums = self._NUM.findall(v)
+                    k = min(len(nums), expected_len)
+                    for j in range(k):
+                        out[i, j] = float(nums[j])
+                elif isinstance(v, (list, np.ndarray)):
+                    k = min(len(v), expected_len)
+                    for j in range(k):
+                        out[i, j] = float(v[j])
+            except Exception:
+                pass
         return out
-    
+
+    def clean_cpu_usage_distribution(self, df):
+        a = self._fast_parse_col(df["cpu_usage_distribution"],11)
+        df[[f"cpu_p{i}" for i in range(0,101,10)]] = a
+        df["cpu_burstiness"] = a[:,9]-a[:,1]
+        return df
+
+    def extract_tail_cpu_features(self, df):
+        '''
+            tail cpu is an array and sometimes string, we extract the usage telemetry 
+            and create features from it
+        '''
+        a = self._fast_parse_col(df["tail_cpu_usage_distribution"],9)
+        with np.errstate(all="ignore"):
+            c = (~np.isnan(a)).sum(1)
+            df["tail_cpu_mean"] = np.where(c, np.nanmean(a,1), np.nan)
+            df["tail_cpu_max"]  = np.where(c, np.nanmax(a,1), np.nan)
+            df["tail_cpu_p90"]  = np.where(c, np.nanpercentile(a,90,1), np.nan)
+            df["tail_cpu_nonzero_frac"] = np.where(c, np.nansum(a>0,1)/c, np.nan)
+        return df
+
+    def remove_pairs_with_nulls(self, df_train, cols = None):
+        '''
+            does what it says
+        '''
+        #df_train.isnull().sum()
+        #cols = ["cpu_p90_logged_normed","cpu_burstiness_logged_normed"]
+        bad_pairs = df_train.loc[
+            df_train[cols].isna().any(axis=1),
+            ["collection_id","instance_index"]
+        ].drop_duplicates() #.shape[0]
+
+        df_train = df_train.merge(bad_pairs, on=["collection_id","instance_index"], how="left", indicator=True)
+        df_train = df_train[df_train["_merge"] == "left_only"].drop(columns="_merge")
+        return df_train    
 
     def clean_log_transforms(
             self, 
@@ -111,8 +82,8 @@ class FeatureTransformer():
             epsilon: float = 1e-7, 
             cols_to_tansform: list = None) -> pd.DataFrame:
         """
-        Applies log transform to list of columns passed as cols_to_transform
-        Inserts log columns immediately to the right.
+            applies log transform to list of columns passed as cols_to_transform
+            inserts log columns immediately to the right.
         """
         out = df.copy()
 

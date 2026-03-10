@@ -1,114 +1,61 @@
 import pandas as pd
 from jax import random
 import jax.numpy as jnp
-
 import numpyro
 from numpyro.contrib.control_flow import scan
 import numpyro.distributions as dist
-from numpyro.examples.datasets import JSB_CHORALES, load_dataset
 from numpyro.handlers import mask
+from numpyro.infer import HMC
 from numpyro.ops.indexing import Vindex
+import numpy as np
+import funsor
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+from scipy.stats import norm
 from numpyro import handlers
 from numpyro.infer import SVI, TraceEnum_ELBO
 from numpyro.infer.autoguide import AutoNormal
 from numpyro.optim import optax_to_numpyro
+from numpyro import util
 import optax
 
 
-import matplotlib.pyplot as plt, seaborn as sns, numpy as np
-from scipy.stats import norm
-
-import funsor
-
-
-class Model():
+class ModelMania():
     def __init__(self):
-        self.sequences = []
-        self.lengths = []
-        self.model = None
-        self.results = None
-        self.rng_key = random.PRNGKey(0)
-        self.steps = 15000
-        self.args = { 'h_dim' : 3 }
-        pass
+            self.sequences = []
+            self.lengths = []
+            self.model = None
+            self.results = None
+            self.guide = None
+            self.rng_key = random.PRNGKey(0)
+            self.steps = 15000
+            self.args = { 'h_dim' : 3 }
+            pass
 
-    def model_gaussian_hmm(self, sequences, lengths, args, include_prior=True):
-        num_sequences, max_length, data_dim = sequences.shape
-        K = args['h_dim']
-
-        with mask(mask=include_prior):
-            # assymetric dirichlet priors on the transition probabilities
-            # we assume some tendency of a state to persist
-            probs_z = numpyro.sample(
-                "probs_z",
-                dist.Dirichlet(0.9 * jnp.eye(K) + 0.1).to_event(1)
-            )
-
-            # normal priors on emmission means
-            mu = numpyro.sample(
-                "mu",
-                dist.Normal(0.0, 1.0)
-                .expand([K, data_dim])
-                .to_event(2)
-            )
-
-            # half normal priors on emmision variance
-            sigma = numpyro.sample(
-                "sigma",
-                dist.HalfNormal(1.0)
-                .expand([K, data_dim])
-                .to_event(2)
-            )
-
-        # transition_fn used by forward and backward algorithms
-        def transition_fn(carry, x_t):
-            z_prev, t = carry
-            # tells jax that sequences can be independantly trained
-            with numpyro.plate("sequences", num_sequences, dim=-1):
-                with mask(mask=(t < lengths)):
-                    z = numpyro.sample(
-                        "z",
-                        dist.Categorical(probs_z[z_prev]),
-                        # processes all state transitions in parallel
-                        infer={"enumerate": "parallel"},
-                    )
-                    numpyro.sample(
-                        "obs",
-                        dist.Independent(
-                            dist.Normal(
-                                Vindex(mu)[z, :],
-                                Vindex(sigma)[z, :] + 1e-6
-                            ), 1
-                        ),
-                        obs=x_t,
-                    )
-            return (z, t + 1), None
-
-        z_init = jnp.zeros(num_sequences, dtype=jnp.int32)
-        scan(transition_fn, (z_init, 0), jnp.swapaxes(sequences, 0, 1))
-
-
-    def get_task(self, df, target_pair = None):
+    def get_task(self, df, time_col='start_time', target_pair = None):
+        #_df_task = get_task(df_train, target_pair=(399280623256, 758))
         (collection_id, instance_index) = target_pair
         if collection_id is not None:
             df = df[df['collection_id'] == collection_id]
         if instance_index is not None:
             df = df[df['instance_index'] == instance_index]
+        
+        df = df.sort_values(by=time_col, ascending=True)
         return df
-    
 
     def create_sequences(self, df,
-                    feature_columns_list=None,
-                    pairs = None,
-                    window_size=100):
-  
+                        feature_columns_list=None,
+                        pairs = None,
+                        window_size=100):
+    
         assert pairs is not None, "pairs must be provided"
 
         sequences =[]
         lengths =[]
         for target_pair in pairs:
-            print(*(target_pair))
-            task_data = self.get_task(df, target_pair)  # should return numpy array of shape (T, 4)
+            #print(*(target_pair))
+            task_data = self.get_task(df, target_pair=target_pair)  # should return numpy array of shape (T, 4)
 
             features = task_data[feature_columns_list].values.astype(np.float32)
 
@@ -120,12 +67,11 @@ class Model():
 
         # Convert to JAX arrays
         self.sequences = jnp.array(np.stack(sequences))  # (num_total_windows, 100, 4)
-        self.lengths = jnp.array(lengths)
 
         return self.sequences, self.lengths
 
 
-    def plot_distributions(self, df, feature_set = None ) -> None:
+    def plot_priors(self, feature_set, df):
         '''
             plots histogram of feature set against emmision priors
         '''
@@ -143,7 +89,6 @@ class Model():
                 plt.xlabel(c,fontsize=10); plt.ylabel('Density' if normed else 'Frequency',fontsize=10)
             plt.tight_layout(); plt.show()
 
-
     def model_for_guide(self, *args, **kwargs):
         '''
             hiding the hidden state from inference
@@ -156,7 +101,7 @@ class Model():
             returns initialized model ready to train.
         '''
         # autonormal guide foe svi
-        guide = AutoNormal(self.model_for_guide)
+        self.guide = AutoNormal(self.model_for_guide)
 
         # creating custom optimizer from optax, decaying clipped adam at 1k steps
         scheduler = optax_to_numpyro(
@@ -169,12 +114,8 @@ class Model():
                 ))
             )
         )
-
-        numpyro.render_model(self.model_gaussian_hmm,
-                  model_args=(self.sequences,self.lengths,self.args),
-                  render_distributions=True)
         
-        self.model = SVI(self.model_gaussian_hmm, guide, scheduler, TraceEnum_ELBO())
+        self.model = SVI(self.model_gaussian_hmm, self.guide, scheduler, TraceEnum_ELBO())
 
         return self.model
     
@@ -190,6 +131,66 @@ class Model():
         )
 
         return self.results
-    
-    
 
+    
+    def model_gaussian_hmm(self, sequences, lengths, args, include_prior=True):
+        num_sequences, max_length, data_dim = sequences.shape
+        K = args['h_dim']
+
+        with mask(mask=include_prior):
+
+            pi = numpyro.sample("pi", dist.Dirichlet(jnp.ones(K)))
+
+            probs_z = numpyro.sample(
+                "probs_z",
+                dist.Dirichlet(jnp.ones(K)).expand([K]).to_event(1)
+            )
+            mu = numpyro.sample(
+                "mu",
+                dist.Normal(0.0, 1.0)
+                .expand([K, data_dim])
+                .to_event(2)
+            )
+
+            sigma = numpyro.sample(
+                "sigma",
+                dist.HalfNormal(1.0)
+                .expand([K, data_dim])
+                .to_event(2)
+            )
+
+        def transition_fn(carry, x_t):
+            z_prev, t = carry
+            with numpyro.plate("sequences", num_sequences, dim=-1):
+                with mask(mask=(t < lengths)):
+                    z = numpyro.sample(
+                            "z",
+                            dist.Categorical(jnp.where(t == 0, pi, probs_z[z_prev])),
+                            infer={"enumerate": "parallel"},
+                    )
+                    numpyro.sample(
+                        "obs",
+                        dist.Independent(
+                            dist.Normal(
+                                Vindex(mu)[z, :],
+                                Vindex(sigma)[z, :] + 1e-6
+                            ), 1
+                        ),
+                        obs=x_t,
+                    )
+            return (z, t + 1), None
+
+        z_init = jnp.zeros(num_sequences, dtype=jnp.int32)
+        scan(transition_fn, (z_init, 0), jnp.swapaxes(sequences, 0, 1))  
+
+    def validate_model_structure(self):
+        with numpyro.handlers.seed(rng_seed=0):
+            with numpyro.handlers.trace() as tr:
+                self.model_gaussian_hmm(self.sequences, self.lengths, self.args)
+            print(util.format_shapes(tr))
+        
+    def render_model(self):
+        model = numpyro.render_model(self.model_gaussian_hmm,
+                    model_args=(self.sequences,self.lengths,self.args),
+                    render_distributions=True)
+        return model

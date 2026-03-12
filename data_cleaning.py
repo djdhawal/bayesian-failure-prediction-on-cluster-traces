@@ -6,16 +6,36 @@ class FeatureEngineer():
     def __init__(self):
         self._NUM = r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?"
 
-    def log_norm_columns(self, df, list_of_columns_to_normalize):
-        logged_normed_cols = []
-        for col in list_of_columns_to_normalize:
-            df[col] = df[col].astype(np.float32)
-            col_logged = f"{col}_logged"
-            df[col_logged] = np.log(df[col] + 1e-7)
-            col_logged_normed = f"{col_logged}_normed"
-            df[col_logged_normed] = (df[col_logged] - df[col_logged].mean()) / df[col_logged].std()
-            logged_normed_cols.append(col_logged_normed)
-        return df, logged_normed_cols
+    def fit_log_norm(df, cols, eps=1e-7):
+        # fitting normalization parameters (TRAIN ONLY)
+        params = {}
+        for col in cols:
+            x = df[col].astype(float)
+            x_logged = np.log(x + eps)
+            mu = x_logged.mean()
+            sigma = x_logged.std()
+            if sigma < 1e-8:
+                sigma = 1e-8
+    
+            params[col] = {
+                "eps": eps,
+                "mean": mu,
+                "std": sigma
+            }
+        return params
+
+        
+    def apply_log_norm(df, cols, params):
+        # apply normalization TRAIN + TEST
+        for col in cols:
+            eps = params[col]["eps"]
+            mu = params[col]["mean"]
+            sigma = params[col]["std"]
+    
+            x = df[col].astype(float)
+            df[f"{col}_logged"] = np.log(x + eps)
+            df[f"{col}_logged_normed"] = (df[f"{col}_logged"] - mu) / sigma
+        return df
 
     import numpy as np, regex as re
 

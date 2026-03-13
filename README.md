@@ -4,9 +4,9 @@
 
 ## Overview
 
-This project models the lifecycle of computational tasks running on Google's Borg cluster manager as a **hierarchical Bayesian Hidden Markov Model (HMM)**. Rather than predicting failure after it happens, the model infers latent resource-usage regimes from raw CPU and memory measurements — detecting when a task is drifting toward a dangerous state *before* it fails.
+This project models the lifecycle of computational tasks running on Google's Borg cluster manager as a **Bayesian Hidden Markov Model (HMM)**. Rather than predicting failure after it happens, the model infers latent resource-usage regimes from raw CPU and memory measurements, consequently detecting when a task is drifting toward a dangerous state *before* it fails.
 
-The key insight is that Borg's eviction mechanism is deterministic: tasks whose actual resource demand exceeds their requested limit get throttled or killed. A rising CPU utilization trajectory, combined with increasing memory pressure and degraded CPU efficiency (CPI), is a measurable precursor to failure that unfolds over minutes. The HMM is designed to detect exactly this pattern from the time series of 5-minute usage windows.
+The key insight is that Borg's eviction mechanism is deterministic: tasks whose actual resource demand exceeds their requested limit get throttled or killed. A rising CPU utilization trajectory, combined with increasing memory pressure and degraded CPU efficiency (CPI), is a measurable precursor to failure that unfolds over minutes. The HMM is designed to detect this pattern from the time series of 5-minute usage windows.
 
 ---
 

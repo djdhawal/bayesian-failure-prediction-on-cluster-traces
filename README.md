@@ -157,7 +157,7 @@ These features were selected because they capture complementary aspects of job b
 
 Together, these features give the model a view of both average behavior and stress behavior.
 
-![Normalized feature distributions compared with prior](figures/normalized_feature_distributions.png)
+![Normalized feature distributions compared with prior](figures/log_normed_features_with_priors.png)
 
 *Figure: Distributions of the five final normalized modeling features compared against the standard normal prior used in the Bayesian HMM. This plot shows that after log transformation and normalization, the features are placed on a more comparable scale for modeling, while still retaining meaningful structure such as skewness, multimodality, and concentration in different regions of the feature space.*
 

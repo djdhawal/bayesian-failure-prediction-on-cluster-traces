@@ -206,8 +206,8 @@ Exact Bayesian inference over HMM parameters is computationally infeasible at th
 
 #### Implementation Details
 
-- **Guide:** `AutoNormal` — a diagonal Gaussian variational distribution over all continuous parameters (π, prob_z, μ, σ). Each parameter gets its own learned mean and variance.
-- **Loss:** `TraceEnum_ELBO` — this is the key detail. Because HMMs have discrete latent states `z`, we use `handlers.block` to hide those states from the guide and let `TraceEnum_ELBO` enumerate (marginalize) over them exactly. This avoids the variance problems of trying to treat discrete variables as continuous.
+- **Guide:** `AutoNormal`: a diagonal Gaussian variational distribution over all continuous parameters (π, prob_z, μ, σ). Each parameter gets its own learned mean and variance.
+- **Loss:** `TraceEnum_ELBO`: this is the key detail. Because HMMs have discrete latent states `z`, we use `handlers.block` to hide those states from the guide and let `TraceEnum_ELBO` enumerate (marginalize) over them exactly. This avoids the variance problems of trying to treat discrete variables as continuous.
 - **Optimizer:** Adam with exponential learning rate decay and gradient clipping via Optax.
 - **Mini-batching:** Rather than feeding full sequences at once, training uses fixed windows of 10 timesteps. This prevents JAX from retracing the computation graph on variable-length inputs and keeps memory usage manageable.
 - **Training:** 1,000 steps. ELBO drops from ~310 to ~165–180, indicating the variational posterior is converging.
@@ -363,6 +363,7 @@ Among rows where `kill_row == 1`, most are assigned to **dominant forward state 
 ![Transitions into Kill Rows (Viterbi)](figures/transitions_into_kill_rows_viterbi.png)
 
 **Figure:** Transition patterns into kill rows using Viterbi-decoded states. Most kill events occur when the job is already in **state 1**, or after it transitions into **state 1** from another state. In particular, jobs coming from **state 2** move into **state 1** before a kill much more often than into any other state, which reinforces the interpretation of **state 1** as a degraded pre-failure regime.
+
 ---
 
 ## What We Learned
@@ -389,7 +390,7 @@ A failure-associated state does not necessarily have to correspond to maximal ut
 
 ## Limitations
 
-This project has several limitations that are important to state clearly.
+This project has some limitations:
 
 ### 1. State meaning is inferred, not labeled
 
@@ -414,8 +415,6 @@ State 1 is strongly associated with failure, but that does not prove causality. 
 ---
 
 ## Future Work
-
-There are several natural next steps.
 
 ### 1. Transition-based early warning
 

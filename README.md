@@ -400,17 +400,9 @@ The hidden states are learned unsupervised. Their interpretation comes from post
 
 Not every termination event has the same meaning. Some kills are intentional, while others reflect system problems. That can blur the mapping between latent state and “true failure.”
 
-### 3. Current pipeline is notebook-first
-
-The project has begun modularization into `src/`, but the most complete end-to-end logic currently lives in the notebooks.
-
-### 4. Validation is based on downstream alignment, not a full production alerting benchmark
+### 3. Validation is based on downstream alignment, not a full production alerting benchmark
 
 The project shows that hidden states are informative, but it does not yet implement a complete online forecasting or alerting system.
-
-### 5. State 1 should be interpreted carefully
-
-State 1 is strongly associated with failure, but that does not prove causality. It is better understood as a latent signature of degraded behavior.
 
 ---
 
@@ -440,10 +432,6 @@ Move the full pipeline from notebook-only logic into clean reusable modules and 
 ### 5. Hybrid models
 
 Use decoded HMM states as features in a downstream supervised failure-risk model.
-
-### 6. Better label refinement
-
-Separate user-initiated kills, parent cleanup, and infrastructure-related failures more carefully so that the hidden states can be matched to more precise operational outcomes.
 
 ---
 

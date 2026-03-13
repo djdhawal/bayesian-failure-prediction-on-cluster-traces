@@ -157,7 +157,7 @@ These features were selected because they capture complementary aspects of job b
 
 Together, these features give the model a view of both average behavior and stress behavior.
 
-![Normalized feature distributions compared with prior](figures/log_normed_features_with_priors.png)
+![Normalized feature distributions compared with prior](figures/log_normed_features_with_priors.jpeg)
 
 *Figure: Distributions of the five final normalized modeling features compared against the standard normal prior used in the Bayesian HMM. This plot shows that after log transformation and normalization, the features are placed on a more comparable scale for modeling, while still retaining meaningful structure such as skewness, multimodality, and concentration in different regions of the feature space.*
 
@@ -344,13 +344,13 @@ Among rows where `kill_row == 1`, the vast majority are assigned to **Viterbi st
 | 2 | 9.093162% |
 Among rows where `kill_row == 1`, most are assigned to **dominant forward state 1**. About **78.00%** of kill rows fall into state 1, compared with **12.91%** in state 0 and **9.09%** in state 2. This supports the same conclusion as the Viterbi decoding results: **state 1 is the hidden state most strongly associated with failure**, which suggests it represents a degraded or pre-failure regime.
 
-![Average resource usage by Viterbi state](figures/viterbi_state_feature_means.png)
+![Average resource usage by Viterbi state](figures/average_resource_utilization_by_viterbi_state.png)
 
-*Figure: Average normalized resource usage across Viterbi states. The model identifies three interpretable job regimes: **State 0** represents a **low-utilization** state with below-average usage across all resource metrics, **State 1** represents an **unhealthy-utilization** state where CPU, memory, and burstiness are especially suppressed and align most strongly with failure, and **State 2** represents a **high-utilization** state with consistently elevated usage across all metrics, corresponding to the most active jobs.*
+**Figure:** Average normalized resource usage across Viterbi states. The model identifies three interpretable job regimes: **State 0** represents a **low-utilization** state with below-average usage across all resource metrics, **State 1** represents an **unhealthy-utilization** state where CPU, memory, and burstiness are especially suppressed and align most strongly with failure, and **State 2** represents a **high-utilization** state with consistently elevated usage across all metrics, corresponding to the most active jobs.
 
 ![Transitions into Kill Rows (Viterbi)](figures/transitions_into_kill_rows_viterbi.png)
 
-*Figure: Transition patterns into kill rows using Viterbi-decoded states. Most kill events occur when the job is already in **state 1**, or after it transitions into **state 1** from another state. In particular, jobs coming from **state 2** move into **state 1** before a kill much more often than into any other state, which reinforces the interpretation of **state 1** as a degraded pre-failure regime.*
+**Figure:** Transition patterns into kill rows using Viterbi-decoded states. Most kill events occur when the job is already in **state 1**, or after it transitions into **state 1** from another state. In particular, jobs coming from **state 2** move into **state 1** before a kill much more often than into any other state, which reinforces the interpretation of **state 1** as a degraded pre-failure regime.
 ---
 
 ## What We Learned

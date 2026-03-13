@@ -98,8 +98,11 @@ bayesian-failure-prediction-on-cluster-traces/
 │   ├── pull_data.ipynb
 │   └── validation.ipynb
 ├── figures/               # saved plots
-│   ├── log_normed_features_with_priors.png
-│   └── training-loss-march03.png
+│   ├── average_resource_utilization_by_viterbi_state.png
+│   ├── log_normed_features_with_priors.jpeg
+│   ├── selected_feature_correlation_heatmap.png
+│   ├── training-loss-march03.png
+│   └── transitions_into_kill_rows_viterbi.png
 ├── src/                   # modularized helper code
 │   ├── data_loader.py
 │   ├── data_cleaning.py

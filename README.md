@@ -87,11 +87,19 @@ This keeps the latent-state discovery step unsupervised with respect to the fina
 ```text
 bayesian-failure-prediction-on-cluster-traces/
 │
-├── data/                  # local data artifacts and intermediate inputs
+├── data/                  # model and parameter files used as inputs for validation
+│   ├── hmm_model_march11.pkl
+│   └── norms_params.pkl
 ├── notebooks/             # end-to-end exploratory and modeling notebooks
+│   ├── MCMC.ipynb
+│   ├── Transformer.ipynb
+│   ├── hmm_model_v01.ipynb
 │   ├── hmm_model_v02.ipynb
+│   ├── pull_data.ipynb
 │   └── validation.ipynb
-├── outputs/               # saved outputs, model artifacts, and plots
+├── outputs/               # saved plots
+│   ├── log_normed_features_with_priors.png
+│   └── training-loss-march03.png
 ├── src/                   # modularized helper code
 │   ├── data_loader.py
 │   ├── data_cleaning.py

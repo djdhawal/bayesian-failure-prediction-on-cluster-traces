@@ -97,7 +97,7 @@ bayesian-failure-prediction-on-cluster-traces/
 │   ├── hmm_model_v02.ipynb
 │   ├── pull_data.ipynb
 │   └── validation.ipynb
-├── outputs/               # saved plots
+├── figures/               # saved plots
 │   ├── log_normed_features_with_priors.png
 │   └── training-loss-march03.png
 ├── src/                   # modularized helper code
@@ -157,9 +157,13 @@ These features were selected because they capture complementary aspects of job b
 
 Together, these features give the model a view of both average behavior and stress behavior.
 
-<!-- INSERT FEATURE TABLE HERE: exact feature definitions and formulas -->
-<!-- INSERT EDA FIGURE HERE: distributions of raw vs transformed features -->
+![Normalized feature distributions compared with prior](figures/normalized_feature_distributions.png)
 
+*Figure: Distributions of the five final normalized modeling features compared against the standard normal prior used in the Bayesian HMM. This plot shows that after log transformation and normalization, the features are placed on a more comparable scale for modeling, while still retaining meaningful structure such as skewness, multimodality, and concentration in different regions of the feature space.*
+
+![Correlation heatmap of selected modeling features](figures/selected_feature_correlation_heatmap.png)
+
+*Figure: Correlation heatmap for the final selected modeling features used in the HMM. The selected set preserves key information about CPU load, memory usage, allocation, and burstiness while avoiding an overly redundant input space.*
 ### Step 5: Apply transformations and normalization
 
 Because raw cluster telemetry can be highly skewed, the project applies transformations to make the feature space more stable for Gaussian emissions.
@@ -313,13 +317,7 @@ Together, these two views help distinguish:
 
 State 1 is the most failure-associated state under both decoding summaries.
 
-This is the central empirical conclusion of the project.
-
-### How to talk about it
-
-A careful interpretation is:
-
-> The model did not simply cluster jobs by “high” versus “low” usage. Instead, it learned a latent regime that is disproportionately associated with task kills. That regime appears to reflect underproductive or degraded execution rather than healthy low-load activity.
+This is the central empirical conclusion of the project. The model did not simply cluster jobs by “high” versus “low” usage. Instead, it learned a latent regime that is disproportionately associated with task kills. That regime appears to reflect underproductive or degraded execution rather than healthy low-load activity.
 
 ### Why this matters
 
@@ -332,10 +330,27 @@ That opens the door to applications such as:
 - state-based risk scoring over time
 - downstream failure prediction systems that use latent states as features
 
-<!-- INSERT VALIDATION FIGURE HERE: kill rows by viterbi state -->
-<!-- INSERT VALIDATION FIGURE HERE: kill rate by state -->
-<!-- INSERT OPTIONAL TRANSITION FIGURE HERE: transitions into state 1 near failure -->
+| Viterbi State | Percent of `kill_row == 1` |
+|---|---:|
+| 0 | 10.282458% |
+| 1 | 80.773043% |
+| 2 | 8.944500% |
+Among rows where `kill_row == 1`, the vast majority are assigned to **Viterbi state 1**. Specifically, about **80.77%** of kill rows fall into state 1, while only **10.28%** fall into state 0 and **8.94%** fall into state 2. This strongly suggests that state 1 is the hidden state most associated with failure and likely captures a degraded or pre-failure job regime.
 
+| Dominant Forward State | Percent of `kill_row == 1` |
+|---|---:|
+| 0 | 12.908821% |
+| 1 | 77.998018% |
+| 2 | 9.093162% |
+Among rows where `kill_row == 1`, most are assigned to **dominant forward state 1**. About **78.00%** of kill rows fall into state 1, compared with **12.91%** in state 0 and **9.09%** in state 2. This supports the same conclusion as the Viterbi decoding results: **state 1 is the hidden state most strongly associated with failure**, which suggests it represents a degraded or pre-failure regime.
+
+![Average resource usage by Viterbi state](figures/viterbi_state_feature_means.png)
+
+*Figure: Average normalized resource usage across Viterbi states. The model identifies three interpretable job regimes: **State 0** represents a **low-utilization** state with below-average usage across all resource metrics, **State 1** represents an **unhealthy-utilization** state where CPU, memory, and burstiness are especially suppressed and align most strongly with failure, and **State 2** represents a **high-utilization** state with consistently elevated usage across all metrics, corresponding to the most active jobs.*
+
+![Transitions into Kill Rows (Viterbi)](figures/transitions_into_kill_rows_viterbi.png)
+
+*Figure: Transition patterns into kill rows using Viterbi-decoded states. Most kill events occur when the job is already in **state 1**, or after it transitions into **state 1** from another state. In particular, jobs coming from **state 2** move into **state 1** before a kill much more often than into any other state, which reinforces the interpretation of **state 1** as a degraded pre-failure regime.*
 ---
 
 ## What We Learned
@@ -447,5 +462,6 @@ In short, this project shows that cluster failures leave behind temporal structu
 - Pandas
 - Scikit-learn
 - Matplotlib / Seaborn
+### Course Acknowledgment
 
-<!-- OPTIONAL: ADD COURSE / TEAM / UNIVERSITY ACKNOWLEDGMENTS HERE -->
+This project was completed as part of **ADSP 32014 IP01: Bayesian Machine Learning with Generative AI Applications** at the **University of Chicago** under the guidance of **Professor Batu Gundogdu**.

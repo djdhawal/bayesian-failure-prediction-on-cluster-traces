@@ -189,23 +189,32 @@ At this stage, each sequence becomes:
 - a matrix of observations
 - the input to the latent-state model
 
-### Step 7: Train the Bayesian HMM
+### Step 7: Train the Bayesian HMM with SVI
 
 The model is implemented in **NumPyro** using **JAX**, with **Stochastic Variational Inference (SVI)** used for fitting.
 
 The HMM learns:
-
-- initial state probabilities
-- transition probabilities between states
-- Gaussian emission parameters for each state
+- initial state probabilities (π)
+- transition probabilities between states (prob_z)
+- Gaussian emission parameters (μ, σ) for each state
 
 The state space is fixed to **3 latent states** in the final version.
 
-The choice of a Bayesian HMM is useful because it gives:
+#### Why SVI?
 
-- a principled latent temporal structure
-- probabilistic uncertainty-aware state inference
-- a natural way to model trajectories rather than isolated points
+Exact Bayesian inference over HMM parameters is computationally infeasible at this scale — 724 training sequences with a mean length of 267 timesteps, some stretching to 300,000 timesteps. MCMC would require running many chains across the full dataset. SVI instead approximates the posterior by maximizing the **Evidence Lower Bound (ELBO)**, making inference tractable.
+
+#### Implementation Details
+
+- **Guide:** `AutoNormal` — a diagonal Gaussian variational distribution over all continuous parameters (π, prob_z, μ, σ). Each parameter gets its own learned mean and variance.
+- **Loss:** `TraceEnum_ELBO` — this is the key detail. Because HMMs have discrete latent states `z`, we use `handlers.block` to hide those states from the guide and let `TraceEnum_ELBO` enumerate (marginalize) over them exactly. This avoids the variance problems of trying to treat discrete variables as continuous.
+- **Optimizer:** Adam with exponential learning rate decay and gradient clipping via Optax.
+- **Mini-batching:** Rather than feeding full sequences at once, training uses fixed windows of 10 timesteps. This prevents JAX from retracing the computation graph on variable-length inputs and keeps memory usage manageable.
+- **Training:** 1,000 steps. ELBO drops from ~310 to ~165–180, indicating the variational posterior is converging.
+
+#### Posterior Extraction
+
+After training, 200 samples are drawn from the learned guide (the variational posterior) and averaged to obtain point estimates for π, prob_z, μ, and σ. These become the parameters used in the forward algorithm and Viterbi decoding.
 
 ### Step 8: Save learned parameters
 
